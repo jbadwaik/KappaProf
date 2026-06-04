@@ -1,0 +1,18 @@
+# --------------------------------------------------------------------------------------------------
+# SPDX-License-Identifier: Apache-2.0
+# --------------------------------------------------------------------------------------------------
+
+spack:
+  specs:
+  - lyra
+  - catch2
+  - openblas
+  - nlohmann-json
+
+  view:
+    default:
+      root: .spack-env/view
+
+  concretizer:
+    unify: true
+

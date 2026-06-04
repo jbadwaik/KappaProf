@@ -1,0 +1,61 @@
+# --------------------------------------------------------------------------------------------------
+# SPDX-License-Identifier: Apache-2.0
+# --------------------------------------------------------------------------------------------------
+
+name: CI Container
+
+on:
+  push:
+    paths:
+      - tests/share/setup/docker/rockylinux.9/dockerfile
+      - tests/share/setup/docker/rockylinux.9/version
+      - .github/workflows/container.rockylinux.9.yml
+  pull_request:
+    paths:
+      - tests/share/setup/docker/rockylinux.9/dockerfile
+      - tests/share/setup/docker/rockylinux.9/version
+      - .github/workflows/container.rockylinux.9.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read CI image version
+        id: version
+        shell: bash
+        run: |
+          echo "imver=$(cat tests/share/setup/docker/rockylinux.9/version)" >> "$GITHUB_OUTPUT"
+          echo "bcver=$(cat tests/share/setup/docker/rockylinux.9/version)-buildcache" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Set up Docker Buildx builder
+        run: |
+          docker buildx create --name kprof-builder --driver docker-container --use
+          docker buildx inspect --bootstrap
+
+      - name: Build CI container
+        run: |
+          docker buildx build \
+            --cache-from \
+            "type=registry,ref=ghcr.io/jbadwaik/kprof/ci.rockylinux.9:${{ steps.version.outputs.bcver }}" \
+            --cache-to \
+            "type=registry,ref=ghcr.io/jbadwaik/kprof/ci.rockylinux.9:${{ steps.version.outputs.bcver }},mode=max" \
+            --label "org.opencontainers.image.version=${{ steps.version.outputs.imver }}" \
+            --tag "ghcr.io/jbadwaik/kprof/ci.rockylinux.9:${{ steps.version.outputs.imver }}" \
+            --tag "ghcr.io/jbadwaik/kprof/ci.rockylinux.9:latest" \
+            --file tests/share/setup/docker/rockylinux.9/dockerfile \
+            --push \
+            .
+

@@ -1,0 +1,42 @@
+# --------------------------------------------------------------------------------------------------
+# SPDX-License-Identifier: Apache-2.0
+# --------------------------------------------------------------------------------------------------
+FROM rockylinux:9.3.20231119
+
+RUN dnf update -y
+
+RUN dnf install -y dnf-plugins-core && dnf config-manager --set-enabled crb && dnf clean all
+
+RUN dnf install -y epel-release && dnf clean all
+
+RUN dnf update -y && dnf clean all
+
+RUN dnf install -y python3 python3-pip && dnf clean all
+
+RUN dnf install -y curl-minimal file findutils patch which && dnf clean all
+
+RUN dnf install -y bzip2 gzip tar unzip xz zstd && dnf clean all
+
+
+RUN dnf install -y cmake git make ninja-build git jq skopeo && dnf clean all
+
+RUN dnf install -y gcc gcc-c++ gcc-gfortran kernel-headers kernel-tools kernel-tools-libs perf && dnf clean all
+
+RUN dnf install -y gcc-toolset-15 && dnf clean all
+
+RUN dnf -y install dnf-plugins-core
+RUN dnf config-manager --add-repo https://download.docker.com/linux/rhel/docker-ce.repo
+RUN dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+ENV PKG_CONFIG_PATH=/opt/rh/gcc-toolset-15/root/usr/lib64/pkgconfig
+ENV MANPATH=/opt/rh/gcc-toolset-15/root/usr/share/man
+ENV INFOPATH=/opt/rh/gcc-toolset-15/root/usr/share/info
+ENV LD_LIBRARY_PATH=/opt/rh/gcc-toolset-15/root/usr/lib64:/opt/rh/gcc-toolset-15/root/usr/lib
+ENV PATH=/opt/rh/gcc-toolset-15/root/usr/bin:$PATH
+
+
+ENV SPACK_ROOT=/opt/spack
+RUN git clone --depth 1 --branch v1.1.1 https://github.com/spack/spack.git "${SPACK_ROOT}"
+ENV PATH="${SPACK_ROOT}/bin:${PATH}"
+RUN echo "source ${SPACK_ROOT}/share/spack/setup-env.sh"  >> ~/.bashrc
+RUN spack compiler find

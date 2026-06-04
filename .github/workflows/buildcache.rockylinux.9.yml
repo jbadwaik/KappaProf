@@ -1,0 +1,98 @@
+# --------------------------------------------------------------------------------------------------
+# SPDX-License-Identifier: Apache-2.0
+# --------------------------------------------------------------------------------------------------
+name: Spack buildcache
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  buildcache:
+    runs-on: ubuntu-latest
+
+    env:
+      CI_IMAGE: ghcr.io/jbadwaik/kprof/ci.rockylinux.9:latest
+      SPACK_PACKAGES_ROOT: /opt/spack-packages
+      SPACK_CACHE_IMAGE_BASE: ghcr.io/jbadwaik/kprof/buildcache.rockylinux.9
+
+    container:
+      image: ghcr.io/jbadwaik/kprof/ci.rockylinux.9:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install helper tools
+        run: |
+          dnf install -y git jq skopeo
+
+      - name: Login to GHCR
+        run: |
+          echo "${GITHUB_TOKEN}" | skopeo login ghcr.io \
+            --username "${GITHUB_ACTOR}" \
+            --password-stdin
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get CI image version label
+        id: image-version
+        run: |
+          VERSION="$(
+            skopeo inspect --config "docker://${CI_IMAGE}" \
+              | jq -r '.config.Labels["org.opencontainers.image.version"]'
+          )"
+
+          test -n "$VERSION"
+          test "$VERSION" != "null"
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "CACHE_IMAGE=${SPACK_CACHE_IMAGE_BASE}:${VERSION}" >> "$GITHUB_ENV"
+
+      - name: Add external Spack package repo
+        run: |
+          source /opt/spack/share/spack/setup-env.sh
+
+          git clone --depth 1 --branch develop \
+            https://github.com/jbadwaik/spack-packages.git \
+            "$SPACK_PACKAGES_ROOT"
+
+          spack repo add "$SPACK_PACKAGES_ROOT/repos/spack_repo/builtin"
+          spack repo list
+
+      - name: Configure GHCR Spack buildcache
+        run: |
+          source /opt/spack/share/spack/setup-env.sh
+
+          spack mirror add \
+            --oci-username-variable GITHUB_ACTOR \
+            --oci-password-variable GITHUB_TOKEN \
+            kprof-buildcache \
+            "oci://${CACHE_IMAGE}"
+
+          spack mirror list
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Spack environment
+        run: |
+          source /opt/spack/share/spack/setup-env.sh
+
+          spack env activate .
+          spack install --fail-fast
+
+      - name: Push Spack buildcache
+        run: |
+          source /opt/spack/share/spack/setup-env.sh
+
+          spack env activate .
+          spack buildcache push --base-image "$CI_IMAGE" kprof-buildcache
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

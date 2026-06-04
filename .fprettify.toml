@@ -1,0 +1,6 @@
+indent = 4
+whitespace = 4
+line-length = 100
+strict-indent = true
+enable-decl = false
+case = 0
